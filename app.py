@@ -1,9 +1,10 @@
 """
-Two-tier Flask Student Management System
+Simple Book Management Application
 Flask Web Tier + MySQL RDS Database Tier
+Web form for adding, listing, updating, and deleting books
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
@@ -15,307 +16,101 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
     'DATABASE_URL',
-    'mysql+pymysql://root:password@localhost:3306/student_db'
+    'mysql+pymysql://root:password@localhost:3306/books_db'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = 'your-secret-key-for-sessions'
 db = SQLAlchemy(app)
 
 
-# ===== DATABASE MODELS =====
+# ===== DATABASE MODEL =====
 
-class Student(db.Model):
-    __tablename__ = 'students'
+class Book(db.Model):
+    __tablename__ = 'books'
     id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    student_id = db.Column(db.String(20), unique=True, nullable=False)
-    enrollment_date = db.Column(db.DateTime, default=datetime.utcnow)
-    enrollments = db.relationship('Enrollment', backref='student', lazy=True, cascade='all, delete-orphan')
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'first_name': self.first_name,
-            'last_name': self.last_name,
-            'email': self.email,
-            'student_id': self.student_id,
-            'enrollment_date': self.enrollment_date.isoformat() if self.enrollment_date else None
-        }
-
-
-class Course(db.Model):
-    __tablename__ = 'courses'
-    id = db.Column(db.Integer, primary_key=True)
-    course_code = db.Column(db.String(20), unique=True, nullable=False)
-    course_name = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text)
-    credits = db.Column(db.Integer, default=3)
-    instructor = db.Column(db.String(100), nullable=False)
-    capacity = db.Column(db.Integer, default=30)
+    author_name = db.Column(db.String(100), nullable=False)
+    book_name = db.Column(db.String(200), nullable=False)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
-    enrollments = db.relationship('Enrollment', backref='course', lazy=True, cascade='all, delete-orphan')
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'course_code': self.course_code,
-            'course_name': self.course_name,
-            'description': self.description,
-            'credits': self.credits,
-            'instructor': self.instructor,
-            'capacity': self.capacity,
-            'enrolled_count': len(self.enrollments),
-            'created_date': self.created_date.isoformat() if self.created_date else None
-        }
+    def __repr__(self):
+        return f'<Book {self.book_name}>'
 
 
-class Enrollment(db.Model):
-    __tablename__ = 'enrollments'
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    enrollment_date = db.Column(db.DateTime, default=datetime.utcnow)
-    grade = db.Column(db.String(2))
-    __table_args__ = (db.UniqueConstraint('student_id', 'course_id', name='unique_student_course'),)
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'student_id': self.student_id,
-            'course_id': self.course_id,
-            'student_name': f'{self.student.first_name} {self.student.last_name}',
-            'course_code': self.course.course_code,
-            'enrollment_date': self.enrollment_date.isoformat() if self.enrollment_date else None,
-            'grade': self.grade
-        }
+# ===== ROUTES =====
 
-
-# ===== API ENDPOINTS =====
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return {'status': 'healthy'}, 200
-
-
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
-    return {
-        'message': 'Two-tier Flask Application',
-        'version': '1.0.0',
-        'endpoints': {
-            'students': '/api/students',
-            'courses': '/api/courses',
-            'enrollments': '/api/enrollments'
-        }
-    }, 200
+    """Home page with form to add book"""
+    books = Book.query.all()
+    return render_template('index.html', books=books)
 
 
-# STUDENT ENDPOINTS
-@app.route('/api/students', methods=['GET'])
-def get_students():
-    students = Student.query.all()
-    return jsonify([s.to_dict() for s in students]), 200
-
-
-@app.route('/api/students/<int:student_id>', methods=['GET'])
-def get_student(student_id):
-    student = Student.query.get_or_404(student_id)
-    return jsonify(student.to_dict()), 200
-
-
-@app.route('/api/students', methods=['POST'])
-def create_student():
+@app.route('/add', methods=['POST'])
+def add_book():
+    """Add a new book"""
     try:
-        data = request.get_json()
-        if not all(k in data for k in ['first_name', 'last_name', 'email', 'student_id']):
-            return jsonify({'error': 'Missing required fields'}), 400
+        author_name = request.form.get('author_name')
+        book_name = request.form.get('book_name')
         
-        student = Student(
-            first_name=data['first_name'],
-            last_name=data['last_name'],
-            email=data['email'],
-            student_id=data['student_id']
-        )
-        db.session.add(student)
-        db.session.commit()
-        return jsonify(student.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/students/<int:student_id>', methods=['PUT'])
-def update_student(student_id):
-    try:
-        student = Student.query.get_or_404(student_id)
-        data = request.get_json()
-        if 'first_name' in data:
-            student.first_name = data['first_name']
-        if 'last_name' in data:
-            student.last_name = data['last_name']
-        if 'email' in data:
-            student.email = data['email']
-        db.session.commit()
-        return jsonify(student.to_dict()), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/students/<int:student_id>', methods=['DELETE'])
-def delete_student(student_id):
-    try:
-        student = Student.query.get_or_404(student_id)
-        db.session.delete(student)
-        db.session.commit()
-        return jsonify({'message': 'Student deleted'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-# COURSE ENDPOINTS
-@app.route('/api/courses', methods=['GET'])
-def get_courses():
-    courses = Course.query.all()
-    return jsonify([c.to_dict() for c in courses]), 200
-
-
-@app.route('/api/courses/<int:course_id>', methods=['GET'])
-def get_course(course_id):
-    course = Course.query.get_or_404(course_id)
-    return jsonify(course.to_dict()), 200
-
-
-@app.route('/api/courses', methods=['POST'])
-def create_course():
-    try:
-        data = request.get_json()
-        if not all(k in data for k in ['course_code', 'course_name', 'instructor']):
-            return jsonify({'error': 'Missing required fields'}), 400
+        if not author_name or not book_name:
+            flash('Author name and book name are required!', 'error')
+            return redirect(url_for('index'))
         
-        course = Course(
-            course_code=data['course_code'],
-            course_name=data['course_name'],
-            description=data.get('description', ''),
-            credits=data.get('credits', 3),
-            instructor=data['instructor'],
-            capacity=data.get('capacity', 30)
-        )
-        db.session.add(course)
+        book = Book(author_name=author_name, book_name=book_name)
+        db.session.add(book)
         db.session.commit()
-        return jsonify(course.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/courses/<int:course_id>', methods=['PUT'])
-def update_course(course_id):
-    try:
-        course = Course.query.get_or_404(course_id)
-        data = request.get_json()
-        if 'course_name' in data:
-            course.course_name = data['course_name']
-        if 'description' in data:
-            course.description = data['description']
-        if 'credits' in data:
-            course.credits = data['credits']
-        if 'instructor' in data:
-            course.instructor = data['instructor']
-        if 'capacity' in data:
-            course.capacity = data['capacity']
-        db.session.commit()
-        return jsonify(course.to_dict()), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/courses/<int:course_id>', methods=['DELETE'])
-def delete_course(course_id):
-    try:
-        course = Course.query.get_or_404(course_id)
-        db.session.delete(course)
-        db.session.commit()
-        return jsonify({'message': 'Course deleted'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-# ENROLLMENT ENDPOINTS
-@app.route('/api/enrollments', methods=['GET'])
-def get_enrollments():
-    enrollments = Enrollment.query.all()
-    return jsonify([e.to_dict() for e in enrollments]), 200
-
-
-@app.route('/api/enrollments', methods=['POST'])
-def create_enrollment():
-    try:
-        data = request.get_json()
-        if 'student_id' not in data or 'course_id' not in data:
-            return jsonify({'error': 'Missing student_id or course_id'}), 400
         
-        student = Student.query.get(data['student_id'])
-        course = Course.query.get(data['course_id'])
-        
-        if not student or not course:
-            return jsonify({'error': 'Student or course not found'}), 404
-        
-        if len(course.enrollments) >= course.capacity:
-            return jsonify({'error': 'Course at full capacity'}), 409
-        
-        enrollment = Enrollment(
-            student_id=data['student_id'],
-            course_id=data['course_id']
-        )
-        db.session.add(enrollment)
-        db.session.commit()
-        return jsonify(enrollment.to_dict()), 201
+        flash(f'Book "{book_name}" added successfully!', 'success')
+        return redirect(url_for('index'))
+    
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+        flash(f'Error adding book: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 
-@app.route('/api/enrollments/<int:enrollment_id>', methods=['PUT'])
-def update_enrollment(enrollment_id):
+@app.route('/delete/<int:book_id>', methods=['POST'])
+def delete_book(book_id):
+    """Delete a book"""
     try:
-        enrollment = Enrollment.query.get_or_404(enrollment_id)
-        data = request.get_json()
-        if 'grade' in data:
-            enrollment.grade = data['grade']
+        book = Book.query.get_or_404(book_id)
+        book_name = book.book_name
+        db.session.delete(book)
         db.session.commit()
-        return jsonify(enrollment.to_dict()), 200
+        
+        flash(f'Book "{book_name}" deleted successfully!', 'success')
+        return redirect(url_for('index'))
+    
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+        flash(f'Error deleting book: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 
-@app.route('/api/enrollments/<int:enrollment_id>', methods=['DELETE'])
-def delete_enrollment(enrollment_id):
-    try:
-        enrollment = Enrollment.query.get_or_404(enrollment_id)
-        db.session.delete(enrollment)
-        db.session.commit()
-        return jsonify({'message': 'Enrollment deleted'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/students/<int:student_id>/courses', methods=['GET'])
-def get_student_courses(student_id):
-    enrollments = Enrollment.query.filter_by(student_id=student_id).all()
-    return jsonify([e.to_dict() for e in enrollments]), 200
-
-
-@app.route('/api/courses/<int:course_id>/students', methods=['GET'])
-def get_course_students(course_id):
-    enrollments = Enrollment.query.filter_by(course_id=course_id).all()
-    return jsonify([e.to_dict() for e in enrollments]), 200
+@app.route('/edit/<int:book_id>', methods=['GET', 'POST'])
+def edit_book(book_id):
+    """Edit a book"""
+    book = Book.query.get_or_404(book_id)
+    
+    if request.method == 'POST':
+        try:
+            book.author_name = request.form.get('author_name')
+            book.book_name = request.form.get('book_name')
+            
+            if not book.author_name or not book.book_name:
+                flash('Author name and book name are required!', 'error')
+                return redirect(url_for('edit_book', book_id=book.id))
+            
+            db.session.commit()
+            flash(f'Book updated successfully!', 'success')
+            return redirect(url_for('index'))
+        
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating book: {str(e)}', 'error')
+            return redirect(url_for('edit_book', book_id=book.id))
+    
+    return render_template('edit.html', book=book)
 
 
 # Create tables

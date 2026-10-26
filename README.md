@@ -1,12 +1,16 @@
-# Two-Tier Flask Student Management System
+# Book Management System
 
-A simple Flask REST API with MySQL database for managing students, courses, and enrollments. Ready to deploy on AWS.
+A simple and elegant web application for managing your book collection. Built with Flask and MySQL, ready to deploy on AWS.
 
-## Architecture
+## Features
 
-```
-Flask Web Tier → MySQL RDS Database Tier
-```
+- ➕ **Add Books** - Add new books with author name and book title
+- 📖 **View Books** - Browse all books in your collection
+- ✏️ **Edit Books** - Update book information
+- 🗑️ **Delete Books** - Remove books from collection
+- 💾 **Persistent Storage** - All data saved in MySQL database
+- 🎨 **Beautiful UI** - Modern, responsive design
+- ☁️ **AWS Ready** - Easy deployment to AWS RDS
 
 ## Quick Start
 
@@ -19,7 +23,7 @@ Flask Web Tier → MySQL RDS Database Tier
 
 1. **Install dependencies**
    ```bash
-   pip install Flask Flask-SQLAlchemy PyMySQL python-dotenv
+   pip install -r requirements.txt
    ```
 
 2. **Configure database**
@@ -28,127 +32,186 @@ Flask Web Tier → MySQL RDS Database Tier
    # Edit .env with your database URL
    ```
 
-3. **Run the app**
+3. **Run the application**
    ```bash
    python app.py
    ```
-   Access at: `http://localhost:5000`
 
-## API Endpoints
+4. **Access the application**
+   - Open your browser and go to: `http://localhost:5000`
 
-### Students
-- `GET /api/students` - List all students
-- `GET /api/students/<id>` - Get student
-- `POST /api/students` - Create student
-- `PUT /api/students/<id>` - Update student
-- `DELETE /api/students/<id>` - Delete student
+## Usage
 
-### Courses
-- `GET /api/courses` - List all courses
-- `GET /api/courses/<id>` - Get course
-- `POST /api/courses` - Create course
-- `PUT /api/courses/<id>` - Update course
-- `DELETE /api/courses/<id>` - Delete course
+### Add a Book
+1. Enter the author name
+2. Enter the book title
+3. Click "Add Book"
+4. The book will appear in the list below
 
-### Enrollments
-- `GET /api/enrollments` - List all enrollments
-- `POST /api/enrollments` - Enroll student in course
-- `PUT /api/enrollments/<id>` - Update enrollment (grade)
-- `DELETE /api/enrollments/<id>` - Unenroll student
+### Edit a Book
+1. Find the book in the list
+2. Click the "✏️ Edit" button
+3. Update the author name or book title
+4. Click "💾 Save Changes"
 
-### Query Relationships
-- `GET /api/students/<id>/courses` - Get student's courses
-- `GET /api/courses/<id>/students` - Get course's students
+### Delete a Book
+1. Find the book in the list
+2. Click the "🗑️ Delete" button
+3. Confirm the deletion
 
-## Example Requests
+## Database Configuration
 
-### Create Student
+### Local MySQL
+Create a database first:
 ```bash
-curl -X POST http://localhost:5000/api/students \
-  -H "Content-Type: application/json" \
-  -d '{
-    "first_name": "John",
-    "last_name": "Doe",
-    "email": "john@example.com",
-    "student_id": "STU001"
-  }'
+mysql -u root -p
+CREATE DATABASE books_db;
+EXIT;
 ```
 
-### Create Course
-```bash
-curl -X POST http://localhost:5000/api/courses \
-  -H "Content-Type: application/json" \
-  -d '{
-    "course_code": "CS101",
-    "course_name": "Intro to CS",
-    "instructor": "Dr. Smith",
-    "credits": 3,
-    "capacity": 30
-  }'
+Then set `DATABASE_URL` in `.env`:
+```
+DATABASE_URL=mysql+pymysql://root:password@localhost:3306/books_db
 ```
 
-### Enroll Student
-```bash
-curl -X POST http://localhost:5000/api/enrollments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "student_id": 1,
-    "course_id": 1
-  }'
-```
+### AWS RDS MySQL
 
-## Database Models
-
-**Students**
-- id, first_name, last_name, email (unique), student_id (unique), enrollment_date
-
-**Courses**
-- id, course_code (unique), course_name, description, credits, instructor, capacity, created_date
-
-**Enrollments**
-- id, student_id, course_id, enrollment_date, grade
-
-## AWS Deployment
-
-### Using RDS MySQL
-
-1. Create MySQL RDS instance in AWS console
+1. Create MySQL RDS instance in AWS Console
 2. Update `.env`:
    ```
-   DATABASE_URL=mysql+pymysql://admin:password@your-rds-endpoint:3306/student_db
+   DATABASE_URL=mysql+pymysql://admin:your_password@your-rds-endpoint.region.rds.amazonaws.com:3306/books_db
    ```
-3. Deploy to AWS EC2 or ECS with Docker
 
-### Using Docker
-
-```bash
-docker build -t flask-app .
-docker run -p 5000:5000 -e DATABASE_URL=your_db_url flask-app
-```
-
-## Health Check
-```bash
-curl http://localhost:5000/health
-```
+3. Database tables created automatically on first run
 
 ## Project Structure
+
 ```
 two-tier/
-├── app.py              # Single file - all code
-├── .env.example        # Environment template
-├── requirements.txt    # Dependencies
-├── README.md          # This file
-└── .gitignore         # Git ignore rules
+├── app.py                      # Main Flask application
+├── requirements.txt            # Python dependencies
+├── .env.example               # Environment variables template
+├── README.md                  # This file
+├── .gitignore                 # Git ignore rules
+└── templates/
+    ├── index.html             # Main page (add & list books)
+    └── edit.html              # Edit book page
 ```
 
-## Dependencies
-- Flask 2.3.3
-- Flask-SQLAlchemy 3.0.5
-- PyMySQL 1.1.0
-- python-dotenv 1.0.0
+## Technologies Used
+
+- **Flask** - Web framework
+- **Flask-SQLAlchemy** - ORM for database
+- **MySQL** - Database
+- **HTML5 & CSS3** - Frontend
+- **Python 3** - Backend
+
+## Database Schema
+
+### Books Table
+```sql
+CREATE TABLE books (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    author_name VARCHAR(100) NOT NULL,
+    book_name VARCHAR(200) NOT NULL,
+    created_date DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## API Information
+
+While this is a web form application, here's how data flows:
+
+- **POST /add** - Add new book (form submission)
+- **POST /delete/<book_id>** - Delete book (form submission)
+- **GET /edit/<book_id>** - Show edit form
+- **POST /edit/<book_id>** - Update book (form submission)
+- **GET /** - Show main page with all books
+
+## Deployment
+
+### Deploy to AWS EC2
+
+1. Launch EC2 instance (Ubuntu 20.04+)
+2. Install Python and MySQL client:
+   ```bash
+   sudo apt update
+   sudo apt install python3-pip python3-venv mysql-client
+   ```
+3. Clone repository:
+   ```bash
+   git clone <your-repo-url>
+   cd two-tier
+   ```
+4. Create virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+5. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+6. Configure .env with RDS endpoint
+7. Run application:
+   ```bash
+   python app.py
+   ```
+
+### Production Deployment with Gunicorn
+
+```bash
+pip install gunicorn
+gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
+```
+
+## Troubleshooting
+
+### Database Connection Error
+```
+Check that:
+- MySQL is running
+- DATABASE_URL in .env is correct
+- Database and user exist
+- User has proper permissions
+```
+
+### Port Already in Use
+```bash
+# Find process using port 5000
+lsof -ti:5000
+
+# Kill the process
+kill -9 <PID>
+```
+
+### Tables Not Created
+- Application creates tables automatically on startup
+- Check that your database user has CREATE privileges
 
 ## Notes
-- All tables created automatically on first run
-- Unique constraints prevent duplicate emails and student IDs
-- Foreign keys ensure data integrity
-- Capacity checking for course enrollment
+
+- The application uses Flask sessions for messages, ensure `secret_key` is set
+- Flash messages auto-close after being dismissed
+- Dates are stored in UTC format
+- All fields are required (Author name and Book name)
+
+## Future Enhancements
+
+- Add book categories/genres
+- Search and filter functionality
+- User authentication and multi-user support
+- Book ratings and reviews
+- Export to CSV/PDF
+- Advanced search with pagination
+
+## License
+
+This project is provided for educational purposes.
+
+## Support
+
+For issues or questions, refer to:
+- [Flask Documentation](https://flask.palletsprojects.com/)
+- [SQLAlchemy Documentation](https://www.sqlalchemy.org/)
+- [AWS RDS Documentation](https://docs.aws.amazon.com/rds/)
